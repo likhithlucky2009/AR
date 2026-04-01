@@ -3745,6 +3745,15 @@ f3date.value=f3.toISOString().split('T')[0];
 function generateReport(){
   var p=currentRecord.patient||{};
   if(!p.name){alert("Please load patient data first.");return;}
+
+  // Pre-fetch consent status from server so report shows correct status
+  _gsCachedCall({ action: "getConsentFiles", op: p.op||"" }, function(){
+    _doGenerateReport();
+  });
+}
+
+function _doGenerateReport(){
+  var p=currentRecord.patient||{};
   window._reportCollecting = true;
   // Ensure Final tab is visible so canvases have dimensions
   showTab(7);
@@ -3801,8 +3810,20 @@ function generateReport(){
   // ── 1b. Consent Document ─────────────────────────────────────
   // Consent section in report — plain language statement
   var consentDiv = document.getElementById("r_consent");
-  var enUploaded = !!(localStorage.getItem("consentSign_EN_"+p.op) || localStorage.getItem("consentSign_"+p.op));
-  var hiUploaded = !!localStorage.getItem("consentSign_HI_"+p.op);
+  // Check localStorage first, then fall back to server cache
+  var enUploaded = false, hiUploaded = false;
+  try {
+    enUploaded = !!(localStorage.getItem("consentSign_EN_"+p.op) || localStorage.getItem("consentSign_"+p.op));
+    hiUploaded = !!localStorage.getItem("consentSign_HI_"+p.op);
+  } catch(e){}
+  // Also check server consent cache
+  if(!enUploaded || !hiUploaded){
+    var cached = _gsCache && _gsCache[JSON.stringify({action:"getConsentFiles",op:p.op})];
+    if(cached && cached.data && cached.data.consent){
+      if(!enUploaded) enUploaded = !!(cached.data.consent.EN && cached.data.consent.EN.urls && cached.data.consent.EN.urls.length);
+      if(!hiUploaded) hiUploaded = !!(cached.data.consent.HI && cached.data.consent.HI.urls && cached.data.consent.HI.urls.length);
+    }
+  }
   var consentStatement = "";
   if(enUploaded || hiUploaded){
     consentStatement =
